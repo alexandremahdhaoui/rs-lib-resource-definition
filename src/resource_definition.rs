@@ -140,8 +140,6 @@ mod tests {
         let input = get_obj();
         let expected = get_str();
         let output = serde_json::to_string(&input).unwrap();
-
-        dbg!(&output);
         assert_eq!(output, expected);
     }
 
@@ -150,7 +148,6 @@ mod tests {
         let input = get_str();
         let expected = get_obj();
         let output: ResourceDefinition<V1AlphaSpec> = serde_json::from_str(input.as_str()).unwrap();
-
         dbg!(&output);
         assert_eq!(output, expected);
     }
@@ -167,10 +164,11 @@ mod tests {
     fn test_de_serde_trait() {
         let input = get_str();
         let expected = get_obj();
-        let output = ResourceDefinition
-            ::<V1AlphaSpec>
-            ::de_json(input)
-            .unwrap();
+        let output =
+            ResourceDefinition
+                ::<V1AlphaSpec>
+                ::de_json(input)
+                .unwrap();
         assert_eq!(output, expected);
     }
 
@@ -178,14 +176,12 @@ mod tests {
     fn test_api() {
         let obj = get_obj();
         let expected = "v1_alpha".to_string();
-
         assert_eq!(obj.api(), expected);
     }
     #[test]
     fn test_kind() {
         let obj = get_obj();
         let expected = "Distributed".to_string();
-
         assert_eq!(obj.kind(), expected);
     }
 }

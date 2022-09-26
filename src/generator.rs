@@ -9,6 +9,7 @@ macro_rules! kind_generator {
     }) => {
         use crate::resource_definition::{ResourceDefinition, SerDe};
         use serde::{Serialize, Deserialize};
+        use crate::collection::Collector;
         use serde_json;
         use serde_json::Error;
         $(
@@ -21,13 +22,14 @@ macro_rules! kind_generator {
                 }
             }
         )+
+        #[derive(Debug, PartialEq)]
         pub enum Collection {
             $(
                 #[allow(non_camel_case_types)]
                 $api(ResourceDefinition<$api_spec>),
             )+
         }
-        impl Collection {
+        impl Collector for Collection{
             fn api(&self) -> String {
                 match self {
                     $(
@@ -97,6 +99,10 @@ mod tests {
         )
     }
 
+    fn get_collection() -> Collection {
+        Collection::v1_alpha(get_obj())
+    }
+
     fn get_str() -> String {
         "{\
          \"api\":\"v1_alpha\",\
@@ -123,8 +129,6 @@ mod tests {
         let expected = get_str();
         let output = input.ser_json().unwrap();
         dbg!(&input);
-        dbg!(&expected);
-        dbg!(&output);
         assert_eq!(output, expected);
     }
 
@@ -135,18 +139,20 @@ mod tests {
         let output: ResourceDefinition<v1_alpha_spec> = serde_json::from_str(input.as_str()).unwrap();
         assert_eq!(output, expected);
     }
-    //
-    // #[test]
-    // fn test_collection_ser() {
-    //     let input = get_obj();
-    //     let expected = get_str();
-    //     assert_eq!(output, expected);
-    // }
-    //
-    // #[test]
-    // fn test_collection_de() {
-    //     let input= get_str();
-    //     let expected= get_obj()
-    //     assert_eq!(output, expected);;
-    // }
+
+    #[test]
+    fn test_collection_ser() {
+        let input = get_collection();
+        let expected = get_str();
+        let output = input.ser_json().unwrap();
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_collection_de() {
+        let input= get_str();
+        let expected= get_collection();
+        let output = Collection::de_json("v1_alpha".to_string(), input).unwrap();
+        assert_eq!(output, expected);
+    }
 }
