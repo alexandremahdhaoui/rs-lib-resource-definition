@@ -1,40 +1,21 @@
-use std::collections::HashMap;
-use std::fmt::{Debug};
-use serde::{Deserialize, Serialize};
-use serde;
+use serde::{self, Deserialize, Serialize};
 use serde_json;
-use serde_json::Error;
+use crate::metadata::Metadata;
 
-fn default_hashmap() -> HashMap<String, String> {
-    HashMap::new()
+/// TODO: Rename `ser_json` & `de_json` to `ser` & `de` to keep the code Open to anything
+/// TODO: Try to create an interface for implementation of serde, e.g. `serde_json`.
+///  try:
+///  - abstract factory
+///  - bridge
+///
+/// Add `set_strategy`?
+pub trait Definition {
+    fn key(&self) -> String;
+    /// TODO: Delete `api` & only use the `json: String`
+    fn ser(&self) -> Option<String>;
+    fn de(input: String) -> Option<Self> where Self: Sized;
 }
 
-//: Serialize + for <'de> Deserialize<'de> + Sized
-pub trait SerDe {
-    fn api(&self) -> String;
-    fn kind(&self) -> String;
-    fn ser_json(&self) -> Result<String, Error>;
-    fn de_json(s: String) -> serde_json::Result<Self> where Self: Sized;
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct Metadata {
-    name: String,
-    #[serde(default = "default_hashmap")]
-    labels: HashMap<String, String>,
-    #[serde(default = "default_hashmap")]
-    annotations: HashMap<String, String>
-}
-
-impl Metadata {
-    pub fn new(name: &str) -> Metadata {
-        Metadata{
-            name: name.to_string(),
-            labels: Default::default(),
-            annotations: Default::default()
-        }
-    }
-}
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ResourceDefinition<T> {
@@ -55,26 +36,29 @@ impl<T> ResourceDefinition<T> {
     }
 }
 
-impl<T: Serialize + for<'de> Deserialize<'de> + Default> SerDe for ResourceDefinition<T> {
-    fn api(&self) -> String {
-        self.api.to_string()
-    }
-    fn kind(&self) -> String {
-        self.kind.to_string()
+impl<T: Serialize + for<'de> Deserialize<'de> + Default> Definition for ResourceDefinition<T> {
+    fn key(&self) -> String {
+        format!("{}_{}", self.kind.to_lowercase(), self.api.to_lowercase())
     }
 
-    fn ser_json(&self) -> Result<String, Error> {
-        serde_json::to_string(&self)
+    fn ser(&self) -> Option<String>{
+        return match serde_json::to_string(&self) {
+            Ok(s) => Some(s),
+            Err(_) => None
+        }
     }
 
-    fn de_json(s: String) -> serde_json::Result<Self> {
-        serde_json::from_str(s.as_str())
+    fn de(s: String) -> Option<Self> {
+        match serde_json::from_str(s.as_str()) {
+            Ok(obj) =>  Some(obj),
+            Err(_) => None
+        }
     }
 }
 
-pub fn new<T>() -> fn(&str, &str, Metadata, T) -> ResourceDefinition<T> {
-    ResourceDefinition::new
-}
+// pub fn new<T>() -> fn(&str, &str, Metadata, T) -> ResourceDefinition<T> {
+//     ResourceDefinition::new
+// }
 
 #[cfg(test)]
 mod tests {
@@ -100,6 +84,9 @@ mod tests {
         }
     }
 
+    fn get_key() -> String {
+        "distributed_v1_alpha".to_string()
+    }
 
     fn get_obj() -> ResourceDefinition<V1AlphaSpec> {
         ResourceDefinition::new(
@@ -156,7 +143,7 @@ mod tests {
     fn test_ser_serde_trait() {
         let input = get_obj();
         let expected = get_str();
-        let output = input.ser_json().unwrap();
+        let output = input.ser().unwrap();
         assert_eq!(output, expected);
     }
 
@@ -167,21 +154,16 @@ mod tests {
         let output =
             ResourceDefinition
                 ::<V1AlphaSpec>
-                ::de_json(input)
+                ::de(input)
                 .unwrap();
         assert_eq!(output, expected);
     }
 
     #[test]
-    fn test_api() {
+    fn test_key() {
         let obj = get_obj();
-        let expected = "v1_alpha".to_string();
-        assert_eq!(obj.api(), expected);
+        let expected = get_key();
+        assert_eq!(obj.key(), expected);
     }
-    #[test]
-    fn test_kind() {
-        let obj = get_obj();
-        let expected = "Distributed".to_string();
-        assert_eq!(obj.kind(), expected);
-    }
+
 }
