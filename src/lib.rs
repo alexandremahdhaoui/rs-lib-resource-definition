@@ -1,7 +1,6 @@
-pub mod resource_definition;
-pub mod collection;
+pub mod specs;
+pub mod apis;
 pub mod metadata;
-mod enums;
 
+pub use metadata::Metadata;
 
-pub use resource_definition::ResourceDefinition;
