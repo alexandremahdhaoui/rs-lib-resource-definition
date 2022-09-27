@@ -1,4 +1,4 @@
-use serde::{self, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json;
 use crate::metadata::Metadata;
 
@@ -11,24 +11,29 @@ use crate::metadata::Metadata;
 /// Add `set_strategy`?
 pub trait Definition {
     fn key(&self) -> String;
-    /// TODO: Delete `api` & only use the `json: String`
     fn ser(&self) -> Option<String>;
     fn de(input: String) -> Option<Self> where Self: Sized;
 }
 
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all="camelCase")]
 pub struct ResourceDefinition<T> {
-    api: String,
+    #[serde(skip)]
+    // #[serde(skip_serializing)]
+    api_version: String,
+    #[serde(skip)]
+    // #[serde(skip_serializing)]
     kind: String,
+    #[serde(default)]
     metadata: Metadata,
     spec: T
 }
 
 impl<T> ResourceDefinition<T> {
-    pub fn new(api: &str, kind: &str, metadata: Metadata, spec: T) -> Self {
+    pub fn new(api_version: &str, kind: &str, metadata: Metadata, spec: T) -> Self {
         Self {
-            api: api.to_string(),
+            api_version: api_version.to_string(),
             kind: kind.to_string(),
             metadata,
             spec
@@ -38,7 +43,7 @@ impl<T> ResourceDefinition<T> {
 
 impl<T: Serialize + for<'de> Deserialize<'de> + Default> Definition for ResourceDefinition<T> {
     fn key(&self) -> String {
-        format!("{}_{}", self.kind.to_lowercase(), self.api.to_lowercase())
+        format!("{}/{}", self.api_version, self.kind)
     }
 
     fn ser(&self) -> Option<String>{
@@ -56,9 +61,31 @@ impl<T: Serialize + for<'de> Deserialize<'de> + Default> Definition for Resource
     }
 }
 
-// pub fn new<T>() -> fn(&str, &str, Metadata, T) -> ResourceDefinition<T> {
-//     ResourceDefinition::new
-// }
+/// TODO: Try to keep the code Open.
+/// TODO: split `def_generator` into:
+///  - `definition`
+///  - `collection`
+
+/// def_generator requires importing:
+///  - serde::{Serialize, Deserialize}
+///  - rs_lib_resource_definition::resource_definition::{ResourceDefinition, Definition}
+///
+#[macro_export]
+macro_rules! def_generator {
+    ($($spec:ident {$($field_name:ident : $field_type:ty),+})+) => {
+        $(
+            #[allow(non_camel_case_types)]
+            #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+            #[serde(rename_all="camelCase")]
+            pub struct $spec { $($field_name: $field_type),+ }
+            impl $spec {
+                fn new($($field_name: $field_type),+) -> Self {
+                    Self {$($field_name),+}
+                }
+            }
+        )+
+    };
+}
 
 #[cfg(test)]
 mod tests {
@@ -66,6 +93,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
+    #[serde(rename_all="camelCase")]
     struct V1AlphaSpec {
         section: String,
         sub_sections: Vec<String>,
@@ -85,12 +113,12 @@ mod tests {
     }
 
     fn get_key() -> String {
-        "distributed_v1_alpha".to_string()
+        "v1alpha/Distributed".to_string()
     }
 
     fn get_obj() -> ResourceDefinition<V1AlphaSpec> {
         ResourceDefinition::new(
-            "v1_alpha",
+            "v1alpha",
             "Distributed",
             Metadata::new("yolo_testing"),
             V1AlphaSpec::new(
@@ -104,7 +132,7 @@ mod tests {
 
     fn get_str() -> String {
         "{\
-         \"api\":\"v1_alpha\",\
+         \"apiVersion\":\"v1alpha\",\
          \"kind\":\"Distributed\",\
          \"metadata\":\
             {\
@@ -115,7 +143,7 @@ mod tests {
          \"spec\":\
             {\
                 \"section\":\"section\",\
-                \"sub_sections\":[\"sub_section\"],\
+                \"subSections\":[\"sub_section\"],\
                 \"title\":\"A Title\",\
                 \"order\":0\
             }\
@@ -123,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ser_rd() {
+    fn ser_rd() {
         let input = get_obj();
         let expected = get_str();
         let output = serde_json::to_string(&input).unwrap();
@@ -131,16 +159,15 @@ mod tests {
     }
 
     #[test]
-    fn test_de_rd() {
+    fn de_rd() {
         let input = get_str();
         let expected = get_obj();
         let output: ResourceDefinition<V1AlphaSpec> = serde_json::from_str(input.as_str()).unwrap();
-        dbg!(&output);
         assert_eq!(output, expected);
     }
 
     #[test]
-    fn test_ser_serde_trait() {
+    fn ser_serde_trait() {
         let input = get_obj();
         let expected = get_str();
         let output = input.ser().unwrap();
@@ -148,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn test_de_serde_trait() {
+    fn de_serde_trait() {
         let input = get_str();
         let expected = get_obj();
         let output =
@@ -160,10 +187,58 @@ mod tests {
     }
 
     #[test]
-    fn test_key() {
+    fn key() {
         let obj = get_obj();
         let expected = get_key();
         assert_eq!(obj.key(), expected);
     }
 
+    def_generator! {
+        v1alpha {
+            section: String,
+            sub_sections: Vec<String>,
+            title: String,
+            order: u8
+        }
+        test {
+            yolo: String
+        }
+    }
+
+    fn get_gen_obj() -> ResourceDefinition<v1alpha> {
+        ResourceDefinition::new(
+            "v1alpha",
+            "Distributed",
+            Metadata::new("yolo_testing"),
+            v1alpha::new(
+                "section".to_string(),
+                vec!["sub_section".to_string()],
+                "A Title".to_string(),
+                0)
+        )
+    }
+
+    #[test]
+    fn def_generator_ser() {
+        let input = get_gen_obj();
+        let expected = get_str();
+        let output = input.ser().unwrap();
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn def_generator_de() {
+        let input = get_str();
+        let expected = get_gen_obj();
+        let output: ResourceDefinition<v1alpha> = serde_json::from_str(input.as_str()).unwrap();
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn def_generator_key() {
+        let input =  get_gen_obj();
+        let expected = get_key();
+        let output = input.key();
+        assert_eq!(output, expected);
+    }
 }
