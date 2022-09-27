@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-fn default_hashmap() -> HashMap<String, String> {
+pub fn default_hashmap() -> HashMap<String, String> {
     HashMap::new()
 }
 
